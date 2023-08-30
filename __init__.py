@@ -27,7 +27,7 @@ bl_info = {
     "description": "Mark active object as asset and render the current view as the asset preview",
 }
 
-def snapshot(self,context,ob):
+def snapshot(self,context,ob,is_material):
     scene = context.scene
     tool = scene.asset_snapshot
     # Make sure we have a camera
@@ -68,7 +68,14 @@ def snapshot(self,context,ob):
     
     #Render File, Mark Asset and Set Image
     bpy.ops.render.render(write_still = True)
-    ob.asset_mark()
+    material = None
+    if is_material:
+        material = ob.active_material
+        if material is None:
+            return
+    else:
+        ob.asset_mark()
+        
     
     ### Draise - Removed due to not working with 4.0.0
         
@@ -77,7 +84,12 @@ def snapshot(self,context,ob):
     #bpy.ops.ed.lib_id_load_custom_preview(context_override,filepath=filepath)
 
     ### Draise - Added to work with 4.0.0
-    with context.temp_override(id=ob): 
+    target = None
+    if is_material:
+        target = material
+    else:
+        target = ob
+    with context.temp_override(id=target): 
         bpy.ops.ed.lib_id_load_custom_preview(filepath=filepath) #
     
     # Unhide the objects hidden for the render
@@ -109,7 +121,7 @@ class properties(PropertyGroup):
 
 class AssetSnapshotCollection(Operator):
     """Create a preview of a collection"""
-    bl_idname = "view3d.asset_snaphot_collection"
+    bl_idname = "view3d.asset_snapshot_collection"
     bl_label = "Asset Snapshot - Collection"
     bl_options = {'REGISTER', 'UNDO'}
     @classmethod
@@ -121,7 +133,7 @@ class AssetSnapshotCollection(Operator):
             return False
         return True
     def execute(self, context):
-        snapshot(self, context,context.collection)
+        snapshot(self, context,context.collection, False)
         return {'FINISHED'}
 
 
@@ -138,7 +150,23 @@ class AssetSnapshotObject(Operator):
             return False
         return True
     def execute(self, context):
-        snapshot(self, context, bpy.context.view_layer.objects.active)
+        snapshot(self, context, bpy.context.view_layer.objects.active, False)
+        return {'FINISHED'}
+
+class AssetSnapshotMaterial(Operator):
+    """Create an asset preview of a material"""
+    bl_idname = "view3d.asset_snapshot_material"
+    bl_label = "Asset Snapshot - Material"
+    bl_options = {'REGISTER', 'UNDO'}
+    @classmethod
+    def poll(cls, context):
+        if context.area.type != 'VIEW_3D':
+            return False
+        if context.view_layer.objects.active == None:
+            return False
+        return True
+    def execute(self, context):
+        snapshot(self, context, bpy.context.view_layer.objects.active, True)
         return {'FINISHED'}
 
 
@@ -157,13 +185,15 @@ class OBJECT_PT_panel(Panel):
         tool = scene.asset_snapshot
         layout.prop(tool, "resolution")
         layout.operator("view3d.object_preview")
-        layout.operator("view3d.asset_snaphot_collection")
+        layout.operator("view3d.asset_snapshot_collection")
+        layout.operator("view3d.asset_snapshot_material")
 
 
 def register():
     bpy.utils.register_class(properties)
     bpy.utils.register_class(AssetSnapshotCollection)
     bpy.utils.register_class(AssetSnapshotObject)
+    bpy.utils.register_class(AssetSnapshotMaterial)
     bpy.utils.register_class(OBJECT_PT_panel)
     
     bpy.types.Scene.asset_snapshot = PointerProperty(type=properties)
@@ -172,6 +202,7 @@ def unregister():
     bpy.utils.unregister_class(properties)
     bpy.utils.unregister_class(AssetSnapshotCollection)
     bpy.utils.unregister_class(AssetSnapshotObject)
+    bpy.utils.unregister_class(AssetSnapshotMaterial)
     bpy.utils.unregister_class(OBJECT_PT_panel)
     
     del bpy.types.Scene.asset_snapshot
